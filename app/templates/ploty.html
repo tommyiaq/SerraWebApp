@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>Set Interval</h1>
+    <form action="" method="post">
+        {{ form.hidden_tag() }}
+        <p>
+            {{ form.starting_time.label }}
+            {{ form.starting_time(size=32) }}
+            {% for error in form.starting_time.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+            
+            {{ form.ending_time.label }}
+            {{ form.ending_time(size=32) }}
+            {% for error in form.ending_time.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+
+        {{ form.submit() }}</p>
+    </form>
+    <img src="{{ image }}"/>
+{% endblock %}
