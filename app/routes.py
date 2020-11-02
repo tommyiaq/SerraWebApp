@@ -127,6 +127,9 @@ def ploty():
     hum = PlotData.data_for_plot('hum', start, end)
     temp = PlotData.data_for_plot('temp', start, end)        
     
+    if hum is None:
+        return redirect(url_for('index'))
+    
     pngImageB64String = PlotData.Plot_Image(hum,temp)
     return render_template("ploty.html", image=pngImageB64String, form = form)
 

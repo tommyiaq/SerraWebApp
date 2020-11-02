@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 from app import db, login
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -6,6 +6,9 @@ from wtforms.validators import ValidationError
 import pytz
 import io
 import base64
+from sqlalchemy.sql import func
+import numpy as np
+import itertools
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -46,13 +49,13 @@ class Light(db.Model):
     
 class PlotInterval(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    starting_time = db.Column(db.DateTime, default=datetime.utcnow)
-    ending_time = db.Column(db.DateTime, default=datetime.utcnow)
+    starting_time = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    ending_time = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     
 class Readings(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     reading_type = db.Column(db.String(140))
     reading_value = db.Column(db.Numeric)
     sensor_id = db.Column(db.Integer, db.ForeignKey('sensors.id'))
@@ -89,6 +92,41 @@ class DHTData(object):
         db.session.add(reading)
         db.session.commit()
         
+    def consistence(self, humidity,temperature):
+        if (humidity==None or temperature==None):
+            return False
+        elif ((humidity>= 0 and humidity<=100) and (temperature>= -50 and temperature<=150)):
+            return True
+        else:
+            return False
+
+    def filter_parameter_last_day(self,reading_type):
+        mean = float(Readings.query.with_entities(func.avg(Readings.reading_value).label('average')).\
+             filter((Readings.timestamp>=datetime.datetime.utcnow()-datetime.timedelta(1,0,0)) & 
+                   (Readings.reading_type == reading_type)).all()[0][0])
+
+        var = float(np.sqrt(Readings.query.with_entities(func.avg(Readings.reading_value*Readings.reading_value)-
+                    func.avg(Readings.reading_value)*func.avg(Readings.reading_value)).\
+            filter((Readings.timestamp>=datetime.datetime.utcnow()-datetime.timedelta(1,0,0)) & 
+                   (Readings.reading_type == reading_type)).all()))
+        return mean, var
+    
+    def filtering(self, humidity,temperature , std_factor = 2):
+        h_mean, h_standard_deviation = self.filter_parameter_last_day('hum')
+        t_mean, t_standard_deviation = self.filter_parameter_last_day('temp')
+
+        if h_standard_deviation == 0 or t_standard_deviation == 0:
+            return True
+
+        elif (humidity > h_mean - std_factor * h_standard_deviation) and \
+            (humidity < h_mean + std_factor * h_standard_deviation) and \
+            (temperature > t_mean - std_factor * t_standard_deviation) and \
+            (temperature < t_mean + std_factor * t_standard_deviation):
+            return True    
+
+        else:
+            return False
+        
 from matplotlib import rcParams
 rcParams.update({'figure.autolayout': True})
 
@@ -105,43 +143,46 @@ class PlotData(object):
         else:
             print(f'reading type should be a string between "hum" and "temp"')
 
-        return data.filter((Readings.timestamp >= PlotData.convert_to_utc(start)) & 
-                    (Readings.timestamp <= PlotData.convert_to_utc(end))).values('timestamp','reading_value')
+        return list(data.filter((Readings.timestamp >= PlotData.convert_to_utc(start)) & 
+                    (Readings.timestamp <= PlotData.convert_to_utc(end))).values('timestamp','reading_value'))
     
     def convert_to_localstr(utc_datetime):
         if isinstance(utc_datetime,str):
-            utc_datetime = datetime.strptime(utc_datetime,'%Y-%m-%d %H:%M:%S.%f')
+            utc_datetime = datetime.datetime.strptime(utc_datetime,'%Y-%m-%d %H:%M:%S.%f')
         utc_datetime  = utc_datetime.replace(tzinfo=pytz.utc)
         la = pytz.timezone('Europe/Rome')
-        return datetime.strftime(utc_datetime.astimezone(la),'%m-%d %H:%M:%S')
+        return datetime.datetime.strftime(utc_datetime.astimezone(la),'%m-%d %H:%M:%S')
 
-    def Plot_Image(hum,temp):
-        fig = Figure(figsize=(12,5))
-        plt.gcf().subplots_adjust(bottom=0.15)
-
-        axis= fig.add_subplot(1, 2, 1)
+    def subplot(fig, measures,y_label, plot_number , line_color):
+        axis= fig.add_subplot(1, 2, plot_number)
         axis.tick_params(axis = 'x',labelrotation=90)
-        axis.set_ylabel("humidity")
+        axis.set_ylabel(y_label)
         axis.xaxis.set_major_locator(plt.MaxNLocator(10))
         axis.yaxis.set_major_locator(plt.MaxNLocator(10))
         axis.grid()
-        xy = [i for i in hum]
-        x = [PlotData.convert_to_localstr(a[0]) for a in xy]
-        y = [a[1] for a in xy] 
-        axis.set_title(f'Umidity from {x[0]} to {x[-1]}')
-        axis.plot(x, y, "-")
+        x_hum = []
+        y_hum = []
+        step = int(len(measures)/300)
+        
+        if step:
+            pass
+        else: 
+            step = 1
+            
+        for (x,y) in  itertools.islice(measures,0,len(measures),):
+            x_hum.append(PlotData.convert_to_localstr(x))
+            y_hum.append(y)
+        if x:
+            axis.set_title(f'{y_label} from {x_hum[0]} to {x_hum[-1]}')
+        axis.plot(x_hum, y_hum, line_color)
 
-        axis2= fig.add_subplot(1, 2, 2)
-        axis2.tick_params(axis = 'x',labelrotation=90)
-        axis2.set_ylabel("temperature")
-        axis2.xaxis.set_major_locator(plt.MaxNLocator(10))
-        axis2.yaxis.set_major_locator(plt.MaxNLocator(10))
-        axis2.grid()
-        xy = [i for i in temp]
-        x = [PlotData.convert_to_localstr(a[0]) for a in xy]
-        y = [a[1] for a in xy] 
-        axis2.set_title(f'Temperature from {x[0]} to {x[-1]}')
-        axis2.plot(x, y, "r-")
+    def Plot_Image(hum,temp):
+        fig = plt.figure(figsize=(12,5))
+        plt.gcf().subplots_adjust(bottom=0.15)
+        
+        if hum:
+            PlotData.subplot(fig,hum, 'humidity',1,"-")
+            PlotData.subplot(fig,temp, 'temperature',2,"r-")
 
         # Convert plot to PNG image
         pngImage = io.BytesIO()
@@ -150,8 +191,8 @@ class PlotData(object):
         # Encode PNG image to base64 string
         pngImageB64String = "data:image/png;base64,"
         pngImageB64String += base64.b64encode(pngImage.getvalue()).decode('utf8')
+        #plt.show()
         return  pngImageB64String
-
         
 @login.user_loader
 def load_user(id):
