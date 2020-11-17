@@ -34,7 +34,6 @@ class LightConfiguration(FlaskForm):
     duration = TimeField('End Time', validators=[DataRequired()])
     submit = SubmitField('Submit')
     
-    #def update_light():
         
 class PlotConfiguration(FlaskForm):
     starting_time = DateTimeField('Start Time', format= '%Y-%m-%d %H:%M:%S',validators=[DataRequired()])

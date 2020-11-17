@@ -95,30 +95,33 @@ class DHTData(object):
     def consistence(self, humidity,temperature):
         if (humidity==None or temperature==None):
             return False
-        elif ((humidity>= 0 and humidity<=100) and (temperature>= -50 and temperature<=150)):
+        elif ((humidity>= 15 and humidity<=100) and (temperature>= -50 and temperature<=150)):
             return True
         else:
             return False
 
     def filter_parameter_last_day(self,reading_type):
-        mean = float(Readings.query.with_entities(func.avg(Readings.reading_value).label('average')).\
-             filter((Readings.timestamp>=datetime.datetime.utcnow()-datetime.timedelta(1,0,0)) & 
-                   (Readings.reading_type == reading_type)).all()[0][0])
-
-        var = float(np.sqrt(Readings.query.with_entities(func.avg(Readings.reading_value*Readings.reading_value)-
-                    func.avg(Readings.reading_value)*func.avg(Readings.reading_value)).\
-            filter((Readings.timestamp>=datetime.datetime.utcnow()-datetime.timedelta(1,0,0)) & 
-                   (Readings.reading_type == reading_type)).all()))
-        return mean, var
+        try:
+            mean = float(Readings.query.order_by(Readings.timestamp.desc()).\
+                        with_entities(func.avg(Readings.reading_value).label('average')).\
+                        filter(Readings.reading_type == reading_type).limit(10)[0][0])
+            return mean
+        except:
+            pass
+        return None
     
     def filtering(self, humidity,temperature , std_factor = 2):
-        h_mean, h_standard_deviation = self.filter_parameter_last_day('hum')
-        t_mean, t_standard_deviation = self.filter_parameter_last_day('temp')
+        h_mean = self.filter_parameter_last_day('hum')
+        t_mean = self.filter_parameter_last_day('temp')
+        
+        if (h_mean is not None) & (t_mean is not None):
+            h_standard_deviation = 20
+            t_standard_deviation = 10
+        else:
+            return True             
 
-        if h_standard_deviation == 0 or t_standard_deviation == 0:
-            return True
 
-        elif (humidity > h_mean - std_factor * h_standard_deviation) and \
+        if (humidity > h_mean - std_factor * h_standard_deviation) and \
             (humidity < h_mean + std_factor * h_standard_deviation) and \
             (temperature > t_mean - std_factor * t_standard_deviation) and \
             (temperature < t_mean + std_factor * t_standard_deviation):
@@ -151,7 +154,7 @@ class PlotData(object):
             utc_datetime = datetime.datetime.strptime(utc_datetime,'%Y-%m-%d %H:%M:%S.%f')
         utc_datetime  = utc_datetime.replace(tzinfo=pytz.utc)
         la = pytz.timezone('Europe/Rome')
-        return datetime.datetime.strftime(utc_datetime.astimezone(la),'%m-%d %H:%M:%S')
+        return datetime.datetime.strftime(utc_datetime.astimezone(la),'%Y-%m-%d %H:%M:%S.%f')
 
     def subplot(fig, measures,y_label, plot_number , line_color):
         axis= fig.add_subplot(1, 2, plot_number)
@@ -193,6 +196,77 @@ class PlotData(object):
         pngImageB64String += base64.b64encode(pngImage.getvalue()).decode('utf8')
         #plt.show()
         return  pngImageB64String
+
+    
+from app import dasht
+from dash.dependencies import Input, Output
+import dash_core_components as dcc
+import dash_html_components as html
+import pandas as pd
+import plotly
+import plotly.graph_objs as go
+from collections import deque
+
+class DashPlot(object):
+    
+    def plot_data():
+        
+        start = datetime.datetime(2020,11,16,10,0).astimezone(pytz.timezone('Europe/Rome'))
+        end = datetime.datetime.now()
+        
+        hum = pd.DataFrame.from_records(PlotData.data_for_plot('hum', start, end), 
+                                        columns = ('datetime', 'value'))
+        hum.datetime = hum.datetime.apply(PlotData.convert_to_localstr)
+        
+        temp = pd.DataFrame.from_records(PlotData.data_for_plot('temp', start, end),
+                                         columns = ('datetime', 'value'))
+        temp.datetime = temp.datetime.apply(PlotData.convert_to_localstr)
+        
+        X = deque(maxlen = 100)
+        Y = deque(maxlen = 100)
+        
+        dasht.layout = html.Div(children=[
+            html.H1(children='Hello Dash'),
+
+            html.Div(children='''
+                Dash: A web application framework for Python.
+            '''),
+#             [
+#                 dcc.Graph(id = 'live-graph', animate = True),
+#                 dcc.Interval(
+#                     id = 'graph-update',
+#                     interval = 2000
+#                     )
+#             ],
+ 
+
+            dcc.Graph(
+                id='example-graph',
+                    figure={
+                        'data': [
+                            {'x': hum.datetime, 'y': hum.value, 'type': 'line', 'name': 'SF'},
+                        ],
+                        'layout': {
+                            'title': 'Dash Data Visualization'
+                        }
+                    }
+                
+                ),
+            
+             dcc.Graph(
+                id='example-graph',
+                    figure={
+                        'data': [
+                            {'x': temp.datetime, 'y': temp.value, 'type': 'line', 'name': 'SF'},
+                        ],
+                        'layout': {
+                            'title': 'Dash Data Visualization'
+                        }
+                    }
+                
+                )
+            ])            
+        return dasht.index()
         
 @login.user_loader
 def load_user(id):

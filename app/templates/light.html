@@ -1,23 +1,12 @@
 {% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf%}
 
-{% block content %}
+{% block app_content %}
     <h1>Light configuration</h1>
-    <form action="" method="post">
-        {{ form.hidden_tag() }}
-        <p>
-            {{ form.starting_time.label }}<br>
-            {{ form.starting_time(size=32) }}<br>
-            {% for error in form.starting_time.errors %}
-            <span style="color: red;">[{{ error }}]</span>
-            {% endfor %}
-        </p>
-        <p>
-            {{ form.duration.label }}<br>
-            {{ form.duration(size=32) }}<br>
-            {% for error in form.duration.errors %}
-            <span style="color: red;">[{{ error }}]</span>
-            {% endfor %}
-        </p>
-        <p>{{ form.submit() }}</p>
-    </form>
+    <div class="row">
+        <div class="col-md-4">
+            {{ wtf.quick_form(form) }}
+        </div>
+    </div>
+    <br>
 {% endblock %}

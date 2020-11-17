@@ -24,6 +24,7 @@ try:
         for sensor in data.get_sensors():
             #print(f'Sensor {sensor.id} type {sensor.sensor_type} pin {sensor.sensor_pin}')
             humidity, temperature = Adafruit_DHT.read_retry(sensor.sensor_type, sensor.sensor_pin)
+            #print(f'Read from Sensor {sensor.id} humidity: {round(humidity,1)} temperature: {round(temperature,1)}')
             if data.consistence(humidity,temperature):
                 if data.filtering(humidity,temperature):
                     #print(f'Read from Sensor {sensor.id} humidity: {round(humidity,1)} temperature: {round(temperature,1)}')

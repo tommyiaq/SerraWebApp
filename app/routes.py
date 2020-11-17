@@ -10,17 +10,7 @@ from app.models import User, Light, PlotInterval, PlotData
 @app.route('/index')
 @login_required
 def index():
-    posts = [
-        {
-            'author': {'username': 'John'},
-            'body': 'Beautiful day in Portland!'
-        },
-        {
-            'author': {'username': 'Susan'},
-            'body': 'The Avengers movie was so cool!'
-        }
-    ]
-    return render_template('index.html', title='Home', posts=posts)
+    return render_template('index.html', title='Home')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -83,7 +73,7 @@ def light():
     elif request.method == 'GET':
         form.starting_time.data = Light.query.first().starting_time
         form.duration.data = Light.query.first().duration
-    return render_template('light.html', form = form)
+    return render_template('light.html', title = "Light Configuration", form = form)
                       
     
 
@@ -133,4 +123,8 @@ def ploty():
     pngImageB64String = PlotData.Plot_Image(hum,temp)
     return render_template("ploty.html", image=pngImageB64String, form = form)
 
-                      
+from app.models import DashPlot
+
+@app.route("/dash")
+def my_dash_app():
+    return DashPlot.plot_data()        
